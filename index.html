@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Semakan Nama Dokumen</title>
+<style>
+  :root {
+    --bg: #f3f5f8; --kad: #ffffff; --teks: #16202e; --pudar: #5f6b7a;
+    --garis: #d9dfe7; --utama: #14467a; --hijau: #12754a; --hijau-bg: #e6f5ee;
+    --kuning: #8a5a00; --kuning-bg: #fdf3dc; --merah: #a32222; --merah-bg: #fdeaea;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--teks);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 560px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 1.35rem; margin: 0 0 4px; }
+  .sub { color: var(--pudar); margin: 0 0 20px; font-size: .95rem; }
+  .kad {
+    background: var(--kad); border: 1px solid var(--garis);
+    border-radius: 14px; padding: 18px;
+  }
+  .zon {
+    display: block; border: 2px dashed var(--garis); border-radius: 12px;
+    padding: 28px 16px; text-align: center; cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .zon:hover, .zon.seret { border-color: var(--utama); background: #f0f5fb; }
+  .zon strong { display: block; font-size: 1.05rem; }
+  .zon span { color: var(--pudar); font-size: .9rem; }
+  .zon .fail { color: var(--utama); font-weight: 600; word-break: break-word; }
+  input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  button {
+    width: 100%; margin-top: 14px; padding: 14px; border: 0; border-radius: 10px;
+    background: var(--utama); color: #fff; font: inherit; font-weight: 600; cursor: pointer;
+  }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .status { margin-top: 14px; color: var(--pudar); font-size: .95rem; display: none; }
+  .status.aktif { display: flex; align-items: center; gap: 10px; }
+  .pusing {
+    width: 18px; height: 18px; flex: none; border-radius: 50%;
+    border: 3px solid var(--garis); border-top-color: var(--utama);
+    animation: pusing .8s linear infinite;
+  }
+  @keyframes pusing { to { transform: rotate(360deg); } }
+
+  #hasil { margin-top: 18px; display: none; }
+  #hasil.aktif { display: block; }
+  .tajuk-hasil {
+    border-radius: 12px; padding: 16px; font-weight: 700; font-size: 1.25rem;
+    text-align: center; margin-bottom: 14px;
+  }
+  .ada .tajuk-hasil { background: var(--hijau-bg); color: var(--hijau); }
+  .tiada .tajuk-hasil { background: var(--kuning-bg); color: var(--kuning); }
+  .ralat .tajuk-hasil { background: var(--merah-bg); color: var(--merah); font-size: 1rem; }
+  .nama { text-align: center; color: var(--pudar); margin: -6px 0 14px; font-size: .9rem; }
+  dl { margin: 0; }
+  .baris { padding: 10px 0; border-top: 1px solid var(--garis); }
+  dt { font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; color: var(--pudar); }
+  dd { margin: 2px 0 0; font-weight: 600; word-break: break-word; }
+  dd.kosong { font-weight: 400; color: var(--pudar); font-style: italic; }
+  .nota { margin-top: 12px; font-size: .9rem; color: var(--pudar); }
+  .amaran { margin-top: 12px; padding: 10px 12px; border-radius: 8px;
+            background: var(--kuning-bg); color: var(--kuning); font-size: .9rem; }
+  a { color: var(--utama); font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Semakan Nama Dokumen</h1>
+  <p class="sub">Muat naik surat atau senarai (PDF). Sistem akan semak sama ada nama anda ada di dalamnya.</p>
+
+  <div class="kad">
+    <label class="zon" id="zon" for="fail">
+      <strong id="zonTajuk">Pilih fail PDF</strong>
+      <span id="zonNota">Tekan di sini atau seret fail ke sini (maks. 10 MB)</span>
+    </label>
+    <input type="file" id="fail" accept="application/pdf,.pdf">
+    <button id="hantar" disabled>Semak dokumen</button>
+    <div class="status" id="status"><div class="pusing"></div><span id="statusTeks"></span></div>
+  </div>
+
+  <div class="kad" id="hasil"></div>
+</main>
+
+<script>
+/* ============ TETAPAN ============ */
+// Tampal URL Web App (berakhir dengan /exec) selepas deploy Code.gs
+const SCRIPT_URL = 'TAMPAL_URL_WEB_APP_DI_SINI';
+const MAX_MB = 10;
+/* ================================= */
+
+const $ = id => document.getElementById(id);
+const elFail = $('fail'), elZon = $('zon'), elHantar = $('hantar'),
+      elStatus = $('status'), elStatusTeks = $('statusTeks'), elHasil = $('hasil');
+let failDipilih = null;
+
+function simpanPin(v) { try { v ? localStorage.setItem('pin', v) : localStorage.removeItem('pin'); } catch (e) {} }
+function bacaPin() { try { return localStorage.getItem('pin') || ''; } catch (e) { return ''; } }
+
+function pilih(f) {
+  elHasil.className = ''; elHasil.textContent = '';
+  if (!f) return;
+  const pdf = f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
+  if (!pdf) return ralat('Sila pilih fail PDF sahaja.');
+  if (f.size > MAX_MB * 1024 * 1024) return ralat('Fail melebihi ' + MAX_MB + ' MB.');
+  failDipilih = f;
+  $('zonTajuk').textContent = f.name;
+  $('zonTajuk').className = 'fail';
+  $('zonNota').textContent = (f.size / 1024 / 1024).toFixed(2) + ' MB — tekan untuk tukar fail';
+  elHantar.disabled = false;
+}
+
+elFail.addEventListener('change', () => pilih(elFail.files[0]));
+['dragenter', 'dragover'].forEach(n => elZon.addEventListener(n, e => { e.preventDefault(); elZon.classList.add('seret'); }));
+['dragleave', 'drop'].forEach(n => elZon.addEventListener(n, e => { e.preventDefault(); elZon.classList.remove('seret'); }));
+elZon.addEventListener('drop', e => pilih(e.dataTransfer.files[0]));
+
+function keBase64(f) {
+  return new Promise((ok, gagal) => {
+    const r = new FileReader();
+    r.onload = () => ok(String(r.result).split(',')[1]);
+    r.onerror = () => gagal(new Error('Fail tidak dapat dibaca.'));
+    r.readAsDataURL(f);
+  });
+}
+
+function sibuk(teks) {
+  elHantar.disabled = !!teks;
+  elStatus.className = 'status' + (teks ? ' aktif' : '');
+  elStatusTeks.textContent = teks || '';
+}
+
+elHantar.addEventListener('click', hantar);
+
+async function hantar() {
+  if (!failDipilih) return;
+  if (!/^https:\/\/script\.google\.com\//.test(SCRIPT_URL)) {
+    return ralat('SCRIPT_URL belum ditetapkan dalam index.html.');
+  }
+  elHasil.className = ''; elHasil.textContent = '';
+  try {
+    sibuk('Membaca fail…');
+    const data = await keBase64(failDipilih);
+    sibuk('Menyemak dokumen… PDF imbasan mungkin ambil 10–40 saat.');
+    // text/plain = "simple request", jadi tiada preflight CORS dengan Apps Script
+    const res = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ filename: failDipilih.name, data: data, pin: bacaPin() })
+    });
+    const j = await res.json();
+    sibuk('');
+    if (!j.ok && j.code === 'PIN') {
+      const p = prompt('Masukkan PIN:');
+      if (p) { simpanPin(p.trim()); return hantar(); }
+      simpanPin('');
+      return ralat('PIN diperlukan.');
+    }
+    if (!j.ok) return ralat(j.error || 'Ralat tidak diketahui.');
+    papar(j);
+  } catch (err) {
+    sibuk('');
+    ralat('Gagal menghubungi pelayan. Semak sambungan internet dan URL Web App. (' + err.message + ')');
+  }
+}
+
+function el(tag, kelas, teks) {
+  const e = document.createElement(tag);
+  if (kelas) e.className = kelas;
+  if (teks != null) e.textContent = teks;
+  return e;
+}
+
+function baris(dl, label, nilai) {
+  const b = el('div', 'baris');
+  b.appendChild(el('dt', '', label));
+  b.appendChild(nilai ? el('dd', '', nilai) : el('dd', 'kosong', 'Tidak dijumpai dalam dokumen'));
+  dl.appendChild(b);
+}
+
+function papar(j) {
+  elHasil.textContent = '';
+  elHasil.className = 'kad aktif ' + (j.jumpa ? 'ada' : 'tiada');
+  elHasil.appendChild(el('div', 'tajuk-hasil', j.jumpa ? 'Nama anda wujud' : 'Nama anda tidak dijumpai'));
+  elHasil.appendChild(el('div', 'nama', j.nama));
+
+  if (j.jumpa) {
+    const dl = el('dl');
+    baris(dl, 'Program', j.tajuk);
+    baris(dl, 'Tarikh', j.tarikh);
+    baris(dl, 'Masa', j.masa);
+    baris(dl, 'Tempat', j.tempat);
+    elHasil.appendChild(dl);
+  }
+  if (j.teksKosong) {
+    elHasil.appendChild(el('div', 'amaran',
+      'Tiada teks dapat dibaca daripada PDF ini (imbasan terlalu kabur atau fail terlalu besar). Sila semak dokumen secara manual.'));
+  }
+  const nota = el('div', 'nota', 'Dokumen disimpan dalam folder: ');
+  const a = el('a', '', j.folder);
+  a.href = j.folderUrl; a.target = '_blank'; a.rel = 'noopener';
+  nota.appendChild(a);
+  elHasil.appendChild(nota);
+  elHasil.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function ralat(mesej) {
+  elHasil.textContent = '';
+  elHasil.className = 'kad aktif ralat';
+  elHasil.appendChild(el('div', 'tajuk-hasil', mesej));
+}
+</script>
+</body>
+</html>
