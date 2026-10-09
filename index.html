@@ -65,6 +65,13 @@
   .amaran { margin-top: 12px; padding: 10px 12px; border-radius: 8px;
             background: var(--kuning-bg); color: var(--kuning); font-size: .9rem; }
   a { color: var(--utama); font-weight: 600; }
+  details.teks { margin-top: 12px; font-size: .9rem; }
+  details.teks summary { cursor: pointer; color: var(--utama); font-weight: 600; }
+  details.teks pre {
+    margin: 8px 0 0; padding: 10px; max-height: 260px; overflow: auto;
+    background: var(--bg); border-radius: 8px; white-space: pre-wrap; word-break: break-word;
+    font: .8rem/1.45 ui-monospace, Consolas, monospace;
+  }
 </style>
 </head>
 <body>
@@ -88,7 +95,7 @@
 <script>
 /* ============ TETAPAN ============ */
 // Tampal URL Web App (berakhir dengan /exec) selepas deploy Code.gs
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzf1tHFGEbYT4z5oYu0b9kOv5y2oFf2SMwM3SJj-LL2Vea9S8XKU-7w5hGJDUe4HT92/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxSzucdV9O-bJkCp1k2fGgMFmZuzYKbMEMWF_zReFNDYF7-7jOoWZ4oOTCQ3h1_iSK2/exec';
 const MAX_MB = 10;
 /* ================================= */
 
@@ -151,8 +158,15 @@ async function hantar() {
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({ filename: failDipilih.name, data: data, pin: bacaPin() })
     });
-    const j = await res.json();
+    const mentah = await res.text();
     sibuk('');
+    let j;
+    try { j = JSON.parse(mentah); }
+    catch (e) {
+      return ralat('Jawapan pelayan tidak dapat dibaca (HTTP ' + res.status + '). ' +
+        'Jika log Executions menunjukkan Completed, satu extension pelayar sedang mengganggu — ' +
+        'matikan extension untuk laman ini atau guna tetingkap Incognito.');
+    }
     if (!j.ok && j.code === 'PIN') {
       const p = prompt('Masukkan PIN:');
       if (p) { simpanPin(p.trim()); return hantar(); }
@@ -195,9 +209,19 @@ function papar(j) {
     baris(dl, 'Tempat', j.tempat);
     elHasil.appendChild(dl);
   }
+  if (j.padanan === 'hampir') {
+    elHasil.appendChild(el('div', 'amaran',
+      'Padanan hampir: ejaan dalam dokumen berbeza 1–2 huruf (mungkin ralat OCR). Sila sahkan dalam dokumen.'));
+  }
   if (j.teksKosong) {
     elHasil.appendChild(el('div', 'amaran',
       'Tiada teks dapat dibaca daripada PDF ini (imbasan terlalu kabur atau fail terlalu besar). Sila semak dokumen secara manual.'));
+  }
+  if (j.teks) {
+    const d = el('details', 'teks');
+    d.appendChild(el('summary', '', 'Lihat teks yang dibaca sistem (' + (j.jumlahAksara || j.teks.length) + ' aksara)'));
+    d.appendChild(el('pre', '', j.teks));
+    elHasil.appendChild(d);
   }
   const nota = el('div', 'nota', 'Dokumen disimpan dalam folder: ');
   const a = el('a', '', j.folder);
