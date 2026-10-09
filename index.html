@@ -95,7 +95,7 @@
 <script>
 /* ============ TETAPAN ============ */
 // Tampal URL Web App (berakhir dengan /exec) selepas deploy Code.gs
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyhdSUoQ9u_U_OeBN9i6YdIU1sP8EEaO5vgpoqv4w8kPmHurazqFhmBpUGErMCmmnDP/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwWS1bQT2wtDxj5rhIaSO7HWtBXXDOJNSoruTjSf_WWPArqctkPbuoyJDBCxqMq8K-O/exec';
 const MAX_MB = 10;
 /* ================================= */
 
@@ -223,7 +223,8 @@ function papar(j) {
     d.appendChild(el('pre', '', j.teks));
     elHasil.appendChild(d);
   }
-  const nota = el('div', 'nota', 'Dokumen disimpan dalam folder: ');
+  if (j.namaFail) elHasil.appendChild(el('div', 'nota', 'Disimpan sebagai: ' + j.namaFail));
+  const nota = el('div', 'nota', 'Folder: ');
   const a = el('a', '', j.folder);
   a.href = j.folderUrl; a.target = '_blank'; a.rel = 'noopener';
   nota.appendChild(a);
